@@ -31,12 +31,23 @@ jobs:
 
       - name: Build with Next.js 🏗️
         run: |
+          if [ -f next.config.js ]; then
+            echo "⚠️ Found next.config.js - Deleting it..."
+            rm next.config.js
+          fi
+          
           npx next build
-          echo "🛠️ Build complete. Current directory: $(pwd)"
-          echo "📂 Contents of current directory:"
-          ls -al
-          echo "📁 Contents of 'out' folder (if exists):"
-          ls -al out/  # This will fail if "out" doesn't exist
+        
+      - name: Verify Output Directory
+        run: |
+          echo "🔍 Checking for 'out' folder..."
+          if [ -d "out" ]; then
+            echo "✅ Found 'out' folder! Contents:"
+            ls -al out/
+          else
+            echo "❌ Error: 'out' folder not found!"
+            exit 1
+          fi
 
         working-directory: .
 
