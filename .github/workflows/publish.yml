@@ -43,7 +43,7 @@ jobs:
           echo "✅ Public folder contents:"
           ls -al public/
           echo "✅ Out folder contents:"
-          ls -R out | grep -E '.jpg|.png|.webp'  # 👈 Check for images
+          ls -R out | grep -E '.jpg|.png|.svg'  # 👈 Check for images
 
         working-directory: .
 
