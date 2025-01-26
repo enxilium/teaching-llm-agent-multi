@@ -1,9 +1,5 @@
 "use client"
 
-import Link from "next/link";
-import Image from "next/image";
-import { usePathname } from 'next/navigation';
-
 /* Components */
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import MenuIcon from "@mui/icons-material/Menu";
