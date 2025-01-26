@@ -6,7 +6,6 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true
   },
-  basePath: "/teaching-llm-agent",
 };
 
 export default nextConfig;
