@@ -35,7 +35,7 @@ jobs:
             echo "⚠️ Found next.config.js - Deleting it..."
             rm next.config.js
           fi
-          
+
           npx next build
         
       - name: Verify Output Directory
@@ -55,6 +55,13 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./out
+        
+      - name: Verify Built Images
+        run: |
+          echo "📷 Checking images in out folder:"
+          find out -name "*.jpg" -o -name "*.png" -o -name "*.webp"
+          echo "🌐 Checking image paths in HTML:"
+          grep -Eroh 'src="[^"]*\.(jpg|png|webp)"' out/ || true
 
   deploy:
     environment:
