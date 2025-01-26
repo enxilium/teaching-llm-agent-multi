@@ -30,7 +30,13 @@ jobs:
           static_site_generator: next
 
       - name: Build with Next.js 🏗️
-        run: npx next build
+        run: |
+          npx next build
+          echo "🛠️ Build complete. Current directory: $(pwd)"
+          echo "📂 Contents of current directory:"
+          ls -al
+          echo "📁 Contents of 'out' folder (if exists):"
+          ls -al out/  # This will fail if "out" doesn't exist
 
         working-directory: .
 
