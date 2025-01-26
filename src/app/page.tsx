@@ -27,7 +27,7 @@ export default function Home() {
           {/* Blackboard Image */}
           <div className="absolute inset-0">
             <Image
-              src="/board.svg"
+              src="board.svg"
               alt="Classroom Board"
               fill
               className="object-fill"
@@ -52,13 +52,13 @@ export default function Home() {
               {/* Left Table */}
               <div className="relative flex-1 h-full">
                 <Image
-                  src="/Clyde.svg"
+                  src="Clyde.svg"
                   alt="User Avatar"
                   fill
                   className="object-contain drop-shadow-lg z-[50]"
                 />
                 <Image
-                  src="/tableLeft.svg"
+                  src="tableLeft.svg"
                   alt="Left Student Table"
                   fill
                   className="object-fill"
@@ -69,7 +69,7 @@ export default function Home() {
             {/* Right Table */}
             <div className="relative flex-1">
               <Image
-                src="/tableRight.svg"
+                src="tableRight.svg"
                 alt="Right Student Table"
                 fill
                 className="object-fill"
