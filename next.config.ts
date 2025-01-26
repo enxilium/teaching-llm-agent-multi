@@ -6,8 +6,7 @@ const nextConfig: NextConfig = {
     unoptimized: true
   },
   // Required for GitHub Pages subpath
-  basePath: process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : "",
-  assetPrefix: process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : "",
+  basePath: process.env.NODE_ENV === "production" ? "/teaching-llm-agent/teaching-llm-agent" : "",
   // Force Next.js to copy ALL public files
   experimental: {
     forceSwcTransforms: true
