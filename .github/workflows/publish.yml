@@ -36,18 +36,14 @@ jobs:
             rm next.config.js
           fi
 
-          npx next build
-        
-      - name: Verify Output Directory
-        run: |
-          echo "🔍 Checking for 'out' folder..."
-          if [ -d "out" ]; then
-            echo "✅ Found 'out' folder! Contents:"
-            ls -al out/
-          else
-            echo "❌ Error: 'out' folder not found!"
-            exit 1
-          fi
+          # Build with production environment
+          NODE_ENV=production npx next build
+
+          # Verify public files were copied
+          echo "✅ Public folder contents:"
+          ls -al public/
+          echo "✅ Out folder contents:"
+          ls -R out | grep -E '.jpg|.png|.webp'  # 👈 Check for images
 
         working-directory: .
 
