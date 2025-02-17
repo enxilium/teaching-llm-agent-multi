@@ -1,13 +1,17 @@
 'use client'
 
 import Image from "next/image";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Scratchboard from "@/components/Scratchboard";
+import { AIAgent } from '@/types/ai';
+import { aiService } from '@/services/aiService';
+import AISidePanel from '@/components/AISidePanel';
 
 interface Message {
   id: number;
   sender: "user" | "ai";
   text: string;
+  agentId?: string;
 }
 
 export default function Home() {
@@ -19,8 +23,9 @@ export default function Home() {
   const [usedQuestionIndices, setUsedQuestionIndices] = useState<number[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
   const [isQuestioningEnabled, setIsQuestioningEnabled] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(120); // 2 minutes
-  const [nextMessageId, setNextMessageId] = useState(3); // IDs 1 and 2 are used initially
+  const [timeLeft, setTimeLeft] = useState(120);
+  const [nextMessageId, setNextMessageId] = useState(3);
+  const [agents, setAgents] = useState<AIAgent[]>([]);
 
   const timerInitializedRef = useRef(false);
   const roundEndedRef = useRef(false);
@@ -31,14 +36,21 @@ export default function Home() {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  // Function to load a new round: clears chat, fetches a new problem, resets timer and state.
-  const startNewRound = async () => {
+  // Load agents on mount
+  useEffect(() => {
+    const loadAgents = async () => {
+      const loadedAgents = await aiService.getAgents();
+      setAgents(loadedAgents);
+    };
+    loadAgents();
+  }, []);
+
+  const startNewRound = useCallback(async () => {
     try {
       const response = await fetch('questions.json');
       const data = await response.json();
       const combinatoricsQuestions = data.combinatorics;
 
-      // Reset used indices if necessary
       let availableIndices = Array.from({ length: combinatoricsQuestions.length }, (_, i) => i)
         .filter(index => !usedQuestionIndices.includes(index));
       if (availableIndices.length === 0) {
@@ -50,58 +62,100 @@ export default function Home() {
       setCurrentQuestionIndex(randomIndex);
       setUsedQuestionIndices(prev => [...prev, randomIndex]);
 
-      // Clear previous messages and set new initial messages
+      // Reset agents' thoughts
+      setAgents(prevAgents =>
+        prevAgents.map(agent => ({
+          ...agent,
+          thoughts: []
+        }))
+      );
+
       setMessages([
         {
           id: 1,
           sender: "ai",
-          text: "Welcome! Let's solve this combinatorics problem. You have 2 minutes to ask questions, then submit your final answer. Please show your reasoning in the scratchboard before submitting."
+          text: "Welcome! Let's solve this combinatorics problem. You have 2 minutes to ask questions, then submit your final answer. Please show your reasoning in the scratchboard before submitting.",
+          agentId: "bob"
         },
         {
           id: 2,
           sender: "ai",
-          text: combinatoricsQuestions[randomIndex]
+          text: combinatoricsQuestions[randomIndex],
+          agentId: "bob"
         }
       ]);
-      // Reset message id counter if desired (or continue incrementing)
       setNextMessageId(3);
     } catch (error) {
       console.error("Error fetching question:", error);
     }
-    // Reset timer and enable interactions for the new round
     setTimeLeft(120);
     setIsQuestioningEnabled(true);
     roundEndedRef.current = false;
-  };
+  }, [usedQuestionIndices]);
 
-  // Initial load – start new round on mount
+  // Start first round on mount
   useEffect(() => {
     startNewRound();
-  }, []); // run once on mount
+  }, []);
 
-  // Timer effect – runs continuously via one interval
+  // Timer effect
   useEffect(() => {
     if (timerInitializedRef.current) return;
     timerInitializedRef.current = true;
 
     const countdownInterval = setInterval(() => {
       setTimeLeft(prevTime => {
-        if (prevTime <= 0) {
-          // End current round if not already ended
-          if (!roundEndedRef.current) {
-            setIsQuestioningEnabled(false);
-            roundEndedRef.current = true;
-            // Start a new round
-            startNewRound();
-          }
+        if (prevTime <= 0 && !roundEndedRef.current) {
+          setIsQuestioningEnabled(false);
+          roundEndedRef.current = true;
+          startNewRound();
           return 0;
         }
-        return prevTime - 1;
+        return prevTime - 1; // This was missing
       });
     }, 1000);
 
-    return () => clearInterval(countdownInterval);
-  }, []);
+    return () => {
+      clearInterval(countdownInterval);
+      timerInitializedRef.current = false; // Reset the ref on cleanup
+    };
+  }, [startNewRound]);
+
+  // Periodic AI questions
+  useEffect(() => {
+    if (!isQuestioningEnabled) return;
+
+    const questionInterval = setInterval(async () => {
+      const randomAgent = agents[Math.floor(Math.random() * agents.length)];
+      if (!randomAgent) return;
+
+      const newThought = await aiService.addThought(randomAgent.id, {
+        content: "I should ask about this specific aspect...",
+        type: 'question'
+      });
+
+      setNextMessageId(prevId => {
+        const newId = prevId;
+        setMessages(prev => [...prev, {
+          id: newId,
+          sender: "ai",
+          text: `[${randomAgent.name}]: What if we consider...?`,
+          agentId: randomAgent.id
+        }]);
+        return newId + 1;
+      });
+
+      setAgents(prevAgents =>
+        prevAgents.map(agent =>
+          agent.id === randomAgent.id
+            ? { ...agent, thoughts: [...agent.thoughts, newThought] }
+            : agent
+        )
+      );
+    }, 15000);
+
+    return () => clearInterval(questionInterval);
+  }, [agents, isQuestioningEnabled]);
 
   const handleQuestion = async () => {
     if (!questionInput.trim() || !isQuestioningEnabled) return;
@@ -195,92 +249,117 @@ export default function Home() {
           </div>
         </div>
 
+        
+        <div className="flex-1 flex items-stretch overflow-hidden">
+          {/* Left AI Panel */}
+          {agents[0] && <AISidePanel agent={agents[0]} isLeft />}
         {/* Blackboard Section */}
-        <div className="flex-1 flex items-center justify-center py-8 relative">
-          <div className="bg-secondary border-[#210651] border-[1em] w-full h-full rounded-xl mx-16 relative">
-            {/* Timer */}
-            <div className={`absolute top-4 right-4 px-4 py-2 rounded-full ${timeLeft <= 30 ? 'bg-red-500' : 'bg-blue-500'} text-white font-mono text-xl z-10 flex items-center gap-2`}>
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-              </svg>
-              {formatTime(timeLeft)}
-            </div>
-
-            {/* Chat Area */}
-            <div className="absolute inset-0 p-8 mt-16 mb-24 mx-8 flex flex-col">
-              <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.sender === "ai" ? "flex-row" : "flex-row-reverse"} items-start`}>
-                    {msg.sender === "ai" && (
-                      <Image
-                        src={"bob_avatar.svg"}
-                        alt="AI Avatar"
-                        width={75}
-                        height={75}
-                        className="rounded-full mr-2"
-                      />
-                    )}
-                    <div className={`max-w-[70%] p-3 rounded-lg ${msg.sender === "ai" ? "bg-gray-200 text-gray-800" : "bg-blue-500 text-white"}`}>
-                      {msg.text}
-                    </div>
-                  </div>
-                ))}
+          <div className="flex-1 flex items-center justify-center py-8 relative">
+            <div className="bg-secondary border-[#210651] border-[1em] w-full h-full rounded-xl mx-16 relative">
+              
+              {/* Timer */}
+              <div className={`absolute top-4 right-4 px-4 py-2 rounded-full ${timeLeft <= 30 ? 'bg-red-500' : 'bg-blue-500'} text-white font-mono text-xl z-10 flex items-center gap-2`}>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                </svg>
+                {formatTime(timeLeft)}
               </div>
 
-              
-            </div>
-          </div>
+              {/* Decorations */}
+              <Image
+                src={"Bob.svg"}
+                alt="Blackboard"
+                width={150}
+                height={150}
+                className="absolute z-10 -top-10 -left-20"
+              />
 
-          {/* Decorations */}
-          <Image
-            src={"Bob.svg"}
-            alt="Blackboard"
-            width={200}
-            height={200}
-            className="absolute z-10 -top-10 left-0"
-          />
-
-          <div className="bg-primary w-[95%] h-8 rounded-2xl absolute left-1/2 transform -translate-x-1/2 bottom-[5%]">
-            <Image
-              src={"flower.svg"}
-              alt="Decoration"
-              width={50}
-              height={50}
-              className="absolute z-10 bottom-full left-24"
-            />
-
-            <Image
-              src={"chalk.svg"}
-              alt="Decoration"
-              width={50}
-              height={50}
-              className="absolute z-10 bottom-full right-64"
-            />
-            {/* Question Input - Moved here and styled */}
-            {isQuestioningEnabled && (
-              <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 w-full max-w-xl">
-                <div className="bg-white bg-opacity-20 rounded-lg p-2 flex gap-2 mx-4">
-                  <input
-                    type="text"
-                    name="question"
-                    value={questionInput}
-                    onChange={(e) => setQuestionInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    className="flex-1 bg-transparent text-white placeholder-gray-300 outline-none px-4"
-                    placeholder="Ask a question..."
-                  />
-                  <button
-                    onClick={handleQuestion}
-                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
-                  >
-                    Ask
-                  </button>
+              {/* Chat Area */}
+              <div className="absolute inset-0 p-8 mt-16 mb-24 mx-8 flex flex-col">
+                <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+                  {messages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.sender === "ai" ? "flex-row" : "flex-row-reverse"} items-start`}>
+                      <div className={`flex flex-col items-center ${msg.sender === "ai" ? "mr-3" : "ml-3"}`}>
+                        {msg.sender === "ai" ? (
+                          <>
+                            <div className="w-[40px] h-[40px] relative"> {/* Fixed size container */}
+                              <Image
+                                src={msg.agentId
+                                  ? agents.find(a => a.id === msg.agentId)?.avatar || "bob_avatar.svg"
+                                  : "bob_avatar.svg"}
+                                alt="AI Avatar"
+                                fill
+                                className="rounded-full object-cover"
+                              />
+                            </div>
+                            <span className="text-white text-xs mt-1">
+                              {msg.agentId
+                                ? agents.find(a => a.id === msg.agentId)?.name || "Bob"
+                                : "Bob"}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-[40px] h-[40px] rounded-full bg-blue-500 flex items-center justify-center">
+                              <span className="text-white text-sm">You</span>
+                            </div>
+                            <span className="text-white text-xs mt-1">You</span>
+                          </>
+                        )}
+                      </div>
+                      <div className={`max-w-[70%] p-3 rounded-lg ${msg.sender === "ai" ? "bg-gray-200 text-gray-800" : "bg-blue-500 text-white"
+                        }`}>
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
+            </div>
 
+            <div className="bg-primary w-[95%] h-8 rounded-2xl absolute left-1/2 transform -translate-x-1/2 bottom-[5%]">
+              <Image
+                src={"flower.svg"}
+                alt="Decoration"
+                width={50}
+                height={50}
+                className="absolute z-10 bottom-full left-24"
+              />
+
+              <Image
+                src={"chalk.svg"}
+                alt="Decoration"
+                width={50}
+                height={50}
+                className="absolute z-10 bottom-full right-64"
+              />
+              {/* Question Input - Moved here and styled */}
+              {isQuestioningEnabled && (
+                <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 w-full max-w-xl">
+                  <div className="bg-white bg-opacity-20 rounded-lg p-2 flex gap-2 mx-4">
+                    <input
+                      type="text"
+                      name="question"
+                      value={questionInput}
+                      onChange={(e) => setQuestionInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="flex-1 bg-transparent text-white placeholder-gray-300 outline-none px-4"
+                      placeholder="Ask a question..."
+                    />
+                    <button
+                      onClick={handleQuestion}
+                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                    >
+                      Ask
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Right AI Panel */}
+          {agents[1] && <AISidePanel agent={agents[1]} />}
+        </div>
         {/* Answer Submission Section */}
         <div className="mt-4 flex gap-4 items-center justify-center">
           <button
