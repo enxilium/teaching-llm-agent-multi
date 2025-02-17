@@ -34,7 +34,7 @@ export default function Home() {
   // Function to load a new round: clears chat, fetches a new problem, resets timer and state.
   const startNewRound = async () => {
     try {
-      const response = await fetch('/questions.json');
+      const response = await fetch('questions.json');
       const data = await response.json();
       const combinatoricsQuestions = data.combinatorics;
 
