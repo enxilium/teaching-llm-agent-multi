@@ -1,7 +1,7 @@
 'use client'
 
 import Image from "next/image";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import Scratchboard from "@/components/Scratchboard";
 
 interface Message {
@@ -32,7 +32,7 @@ export default function Home() {
   };
 
   // Function to load a new round: clears chat, fetches a new problem, resets timer and state.
-  const startNewRound = useCallback(async () => {
+  const startNewRound = async () => {
     try {
       const response = await fetch('/questions.json');
       const data = await response.json();
@@ -53,17 +53,18 @@ export default function Home() {
       // Clear previous messages and set new initial messages
       setMessages([
         {
-          id: nextMessageId,
+          id: 1,
           sender: "ai",
           text: "Welcome! Let's solve this combinatorics problem. You have 2 minutes to ask questions, then submit your final answer. Please show your reasoning in the scratchboard before submitting."
         },
         {
-          id: nextMessageId + 1,
+          id: 2,
           sender: "ai",
           text: combinatoricsQuestions[randomIndex]
         }
       ]);
-      setNextMessageId(prev => prev + 2);
+      // Reset message id counter if desired (or continue incrementing)
+      setNextMessageId(3);
     } catch (error) {
       console.error("Error fetching question:", error);
     }
@@ -71,13 +72,12 @@ export default function Home() {
     setTimeLeft(120);
     setIsQuestioningEnabled(true);
     roundEndedRef.current = false;
-    setScratchboardContent(""); // Clear scratchboard for new round
-  }, [usedQuestionIndices, nextMessageId]);
+  };
 
   // Initial load – start new round on mount
   useEffect(() => {
     startNewRound();
-  }, [startNewRound]);
+  }, [startNewRound]); // run once on mount
 
   // Timer effect – runs continuously via one interval
   useEffect(() => {
@@ -87,9 +87,11 @@ export default function Home() {
     const countdownInterval = setInterval(() => {
       setTimeLeft(prevTime => {
         if (prevTime <= 0) {
+          // End current round if not already ended
           if (!roundEndedRef.current) {
             setIsQuestioningEnabled(false);
             roundEndedRef.current = true;
+            // Start a new round
             startNewRound();
           }
           return 0;
@@ -99,29 +101,37 @@ export default function Home() {
     }, 1000);
 
     return () => clearInterval(countdownInterval);
-  }, [startNewRound]);
+  }, []);
 
   const handleQuestion = async () => {
     if (!questionInput.trim() || !isQuestioningEnabled) return;
 
-    const currentId = nextMessageId;
-    setNextMessageId(prev => prev + 2);
-
-    setMessages(prev => [
-      ...prev,
-      {
-        id: currentId,
-        sender: "user",
-        text: questionInput.trim()
-      },
-      {
-        id: currentId + 1,
-        sender: "ai",
-        text: "Here's my help with your question... [AI response logic here]"
-      }
-    ]);
-
+    setNextMessageId(prevId => {
+      const newId = prevId;
+      setMessages(prev => [
+        ...prev,
+        {
+          id: newId,
+          sender: "user",
+          text: questionInput.trim()
+        }
+      ]);
+      return newId + 1;
+    });
     setQuestionInput("");
+
+    setNextMessageId(prevId => {
+      const newId = prevId;
+      setMessages(prev => [
+        ...prev,
+        {
+          id: newId,
+          sender: "ai",
+          text: "Here's my help with your question... [AI response logic here]"
+        }
+      ]);
+      return newId + 1;
+    });
   };
 
   const handleSend = async () => {
@@ -131,27 +141,36 @@ export default function Home() {
       return;
     }
 
-    const currentId = nextMessageId;
-    setNextMessageId(prev => prev + 2);
-
-    setMessages(prev => [
-      ...prev,
-      {
-        id: currentId,
-        sender: "user",
-        text: `Final Answer: ${input.trim()}`
-      },
-      {
-        id: currentId + 1,
-        sender: "ai",
-        text: `Thank you for your answer! Here's my feedback: [Evaluation logic here]`
-      }
-    ]);
-
+    setNextMessageId(prevId => {
+      const newId = prevId;
+      setMessages(prev => [
+        ...prev,
+        {
+          id: newId,
+          sender: "user",
+          text: `Final Answer: ${input.trim()}`
+        }
+      ]);
+      return newId + 1;
+    });
     setInput("");
+
+    setNextMessageId(prevId => {
+      const newId = prevId;
+      setMessages(prev => [
+        ...prev,
+        {
+          id: newId,
+          sender: "ai",
+          text: `Thank you for your answer! Here's my feedback: [Evaluation logic here]`
+        }
+      ]);
+      return newId + 1;
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    console.log(nextMessageId);
     if (e.key === "Enter") {
       if (e.currentTarget.name === "question") {
         handleQuestion();
@@ -207,10 +226,12 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+
+              
             </div>
           </div>
 
-          {/* Decorations and Question Input */}
+          {/* Decorations */}
           <Image
             src="/Bob.svg"
             alt="Blackboard"
@@ -227,9 +248,17 @@ export default function Home() {
               height="50"
               className="absolute z-10 bottom-full left-24"
             />
+            <Image
+              src="/chalk.svg"
+              alt="Decoration"
+              width="50"
+              height="50"
+              className="absolute z-10 bottom-full right-64"
+            />
+            {/* Question Input - Moved here and styled */}
             {isQuestioningEnabled && (
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-[40%]">
-                <div className="bg-white bg-opacity-20 rounded-lg p-2 flex gap-2">
+              <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 w-full max-w-xl">
+                <div className="bg-white bg-opacity-20 rounded-lg p-2 flex gap-2 mx-4">
                   <input
                     type="text"
                     name="question"
@@ -248,13 +277,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-            <Image
-              src="/chalk.svg"
-              alt="Decoration"
-              width="50"
-              height="50"
-              className="absolute z-10 bottom-full right-64"
-            />
           </div>
         </div>
 
@@ -284,8 +306,8 @@ export default function Home() {
               onClick={handleSend}
               disabled={!scratchboardContent || !isQuestioningEnabled}
               className={`px-4 py-1 rounded-full text-sm ${scratchboardContent && isQuestioningEnabled
-                  ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
             >
               Submit
