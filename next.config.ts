@@ -3,8 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "export",
   reactStrictMode: false,
-  basePath: process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : "",
-  assetPrefix: process.env.NODE_ENV === "production" ? "/teaching-llm-agent/" : "",
+  basePath: process.env.NODE_ENV === "production" ? "/teaching-llm-agent-multi" : "",
+  assetPrefix: process.env.NODE_ENV === "production" ? "/teaching-llm-agent-multi/" : "",
   images: {
     unoptimized: true,
   },
