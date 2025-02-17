@@ -213,10 +213,10 @@ export default function Home() {
                   <div key={msg.id} className={`flex ${msg.sender === "ai" ? "flex-row" : "flex-row-reverse"} items-start`}>
                     {msg.sender === "ai" && (
                       <Image
-                        src="/bob_avatar.svg"
+                        src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}/bob_avatar.svg`}
                         alt="AI Avatar"
-                        width="75"
-                        height="75"
+                        width={75}
+                        height={75}
                         className="rounded-full mr-2"
                       />
                     )}
@@ -233,26 +233,27 @@ export default function Home() {
 
           {/* Decorations */}
           <Image
-            src="/Bob.svg"
+            src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}/Bob.svg`}
             alt="Blackboard"
-            width="200"
-            height="200"
+            width={200}
+            height={200}
             className="absolute z-10 -top-10 left-0"
           />
 
           <div className="bg-primary w-[95%] h-8 rounded-2xl absolute left-1/2 transform -translate-x-1/2 bottom-[5%]">
             <Image
-              src="/flower.svg"
+              src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}/flower.svg`}
               alt="Decoration"
-              width="50"
-              height="50"
+              width={50}
+              height={50}
               className="absolute z-10 bottom-full left-24"
             />
+
             <Image
-              src="/chalk.svg"
+              src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}/chalk.svg`}
               alt="Decoration"
-              width="50"
-              height="50"
+              width={50}
+              height={50}
               className="absolute z-10 bottom-full right-64"
             />
             {/* Question Input - Moved here and styled */}

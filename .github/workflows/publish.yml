@@ -39,35 +39,34 @@ jobs:
           # Build with production environment
           NODE_ENV=production npx next build
 
-          # Verify public files were copied
-          echo "✅ Public folder contents:"
-          ls -al public/
-          echo "✅ Out folder contents:"
-          ls -R out | grep -E '.jpg|.png|.svg'  # 👈 Check for images
+          # Ensure public files are copied
+          echo "📁 Copying public files to out directory..."
+          cp -r public/* out/
 
+          # Verify build contents
+          echo "✅ Out folder contents:"
+          ls -R out/
         working-directory: .
 
       - name: Upload artifact 📡
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./out
-        
+
       - name: Verify Built Images
         run: |
           echo "📷 Checking images in out folder:"
-          find out -name "*.jpg" -o -name "*.png" -o -name "*.webp"
+          find out -type f \( -name "*.svg" -o -name "*.png" -o -name "*.jpg" -o -name "*.webp" \)
           echo "🌐 Checking image paths in HTML:"
-          grep -Eroh 'src="[^"]*\.(jpg|png|webp)"' out/ || true
+          grep -r "src=" out/ || true
 
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     runs-on: ubuntu-latest
     needs: build
-
     steps:
-      - name: Publish to GitHub Pages 🚀
+      - name: Deploy to GitHub Pages 🚀
         id: deployment
         uses: actions/deploy-pages@v4
