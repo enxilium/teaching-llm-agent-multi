@@ -213,7 +213,7 @@ export default function Home() {
                   <div key={msg.id} className={`flex ${msg.sender === "ai" ? "flex-row" : "flex-row-reverse"} items-start`}>
                     {msg.sender === "ai" && (
                       <Image
-                        src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}bob_avatar.svg`}
+                        src={"bob_avatar.svg"}
                         alt="AI Avatar"
                         width={75}
                         height={75}
@@ -233,7 +233,7 @@ export default function Home() {
 
           {/* Decorations */}
           <Image
-            src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}Bob.svg`}
+            src={"Bob.svg"}
             alt="Blackboard"
             width={200}
             height={200}
@@ -242,7 +242,7 @@ export default function Home() {
 
           <div className="bg-primary w-[95%] h-8 rounded-2xl absolute left-1/2 transform -translate-x-1/2 bottom-[5%]">
             <Image
-              src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}flower.svg`}
+              src={"flower.svg"}
               alt="Decoration"
               width={50}
               height={50}
@@ -250,7 +250,7 @@ export default function Home() {
             />
 
             <Image
-              src={`${process.env.NODE_ENV === "production" ? "/teaching-llm-agent" : ""}chalk.svg`}
+              src={"chalk.svg"}
               alt="Decoration"
               width={50}
               height={50}
