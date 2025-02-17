@@ -2,23 +2,23 @@
 
 import Image from "next/image";
 import { useState, useEffect, useRef, useCallback } from "react";
-import Scratchboard from "@/components/Scratchboard";
 import { AIAgent } from '@/types/ai';
 import { aiService } from '@/services/aiService';
 import AISidePanel from '@/components/AISidePanel';
+import TypewriterText from '@/components/TypewriterText';
 
 interface Message {
   id: number;
   sender: "user" | "ai";
   text: string;
   agentId?: string;
+  onComplete?: () => void;
 }
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [questionInput, setQuestionInput] = useState("");
-  const [isScratchboardOpen, setScratchboardOpen] = useState(false);
   const [scratchboardContent, setScratchboardContent] = useState("");
   const [usedQuestionIndices, setUsedQuestionIndices] = useState<number[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number | null>(null);
@@ -26,6 +26,8 @@ export default function Home() {
   const [timeLeft, setTimeLeft] = useState(120);
   const [nextMessageId, setNextMessageId] = useState(3);
   const [agents, setAgents] = useState<AIAgent[]>([]);
+  const [typingMessageIds, setTypingMessageIds] = useState<number[]>([]);
+  const [isFinalAnswerPhase, setIsFinalAnswerPhase] = useState(false);
 
   const timerInitializedRef = useRef(false);
   const roundEndedRef = useRef(false);
@@ -34,6 +36,19 @@ export default function Home() {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  // Add to your imports and interface declarations
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Add this function after your existing state declarations
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   };
 
   // Load agents on mount
@@ -100,7 +115,7 @@ export default function Home() {
 
   // Timer effect
   useEffect(() => {
-    if (timerInitializedRef.current) return;
+    if (timerInitializedRef.current || isFinalAnswerPhase) return;
     timerInitializedRef.current = true;
 
     const countdownInterval = setInterval(() => {
@@ -119,7 +134,7 @@ export default function Home() {
       clearInterval(countdownInterval);
       timerInitializedRef.current = false; // Reset the ref on cleanup
     };
-  }, [startNewRound]);
+  }, [startNewRound, isFinalAnswerPhase]);
 
   // Periodic AI questions
   useEffect(() => {
@@ -134,16 +149,18 @@ export default function Home() {
         type: 'question'
       });
 
-      setNextMessageId(prevId => {
-        const newId = prevId;
-        setMessages(prev => [...prev, {
-          id: newId,
-          sender: "ai",
-          text: `[${randomAgent.name}]: What if we consider...?`,
-          agentId: randomAgent.id
-        }]);
-        return newId + 1;
-      });
+      const messageId = nextMessageId;
+      setNextMessageId(prev => prev + 1);
+
+      // Add the message ID to typing messages before adding the message
+      setTypingMessageIds(prev => [...prev, messageId]);
+
+      setMessages(prev => [...prev, {
+        id: messageId,
+        sender: "ai",
+        text: `[${randomAgent.name}]: What if we consider...?`,
+        agentId: randomAgent.id
+      }]);
 
       setAgents(prevAgents =>
         prevAgents.map(agent =>
@@ -155,39 +172,45 @@ export default function Home() {
     }, 15000);
 
     return () => clearInterval(questionInterval);
-  }, [agents, isQuestioningEnabled]);
+  }, [agents, isQuestioningEnabled, nextMessageId]); // Added nextMessageId as dependency
 
+  // Add this effect after your other useEffects
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Update handleQuestion function
   const handleQuestion = async () => {
     if (!questionInput.trim() || !isQuestioningEnabled) return;
 
-    setNextMessageId(prevId => {
-      const newId = prevId;
-      setMessages(prev => [
-        ...prev,
-        {
-          id: newId,
-          sender: "user",
-          text: questionInput.trim()
-        }
-      ]);
-      return newId + 1;
-    });
+    const currentUserMessageId = nextMessageId;
+    const currentAiMessageId = nextMessageId + 1;
+    setNextMessageId(prev => prev + 2);
+
+    // User message (instant)
+    setMessages(prev => [
+      ...prev,
+      {
+        id: currentUserMessageId,
+        sender: "user",
+        text: questionInput.trim()
+      }
+    ]);
     setQuestionInput("");
 
-    setNextMessageId(prevId => {
-      const newId = prevId;
-      setMessages(prev => [
-        ...prev,
-        {
-          id: newId,
-          sender: "ai",
-          text: "Here's my help with your question... [AI response logic here]"
-        }
-      ]);
-      return newId + 1;
-    });
+    // AI message (animated)
+    setTypingMessageIds(prev => [...prev, currentAiMessageId]);
+    setMessages(prev => [
+      ...prev,
+      {
+        id: currentAiMessageId,
+        sender: "ai",
+        text: "Here's my help with your question... [AI response logic here]"
+      }
+    ]);
   };
 
+  // Update handleSend function
   const handleSend = async () => {
     if (!input.trim() || !isQuestioningEnabled) return;
     if (!scratchboardContent.trim()) {
@@ -195,32 +218,75 @@ export default function Home() {
       return;
     }
 
-    setNextMessageId(prevId => {
-      const newId = prevId;
-      setMessages(prev => [
-        ...prev,
-        {
-          id: newId,
-          sender: "user",
-          text: `Final Answer: ${input.trim()}`
-        }
-      ]);
-      return newId + 1;
-    });
+    // Stop the timer and questioning
+    setIsQuestioningEnabled(false);
+    setIsFinalAnswerPhase(true);
+
+    // Store all message IDs
+    const messageIds = {
+      user: nextMessageId,
+      agent1: nextMessageId + 1,
+      agent2: nextMessageId + 2,
+      teacher: nextMessageId + 3
+    };
+    setNextMessageId(prev => prev + 4);
+
+    // User's final answer (immediate)
+    setMessages(prev => [
+      ...prev,
+      {
+        id: messageIds.user,
+        sender: "user",
+        text: `Final Answer: ${input.trim()}\n\nReasoning: ${scratchboardContent}`
+      }
+    ]);
     setInput("");
 
-    setNextMessageId(prevId => {
-      const newId = prevId;
-      setMessages(prev => [
-        ...prev,
-        {
-          id: newId,
-          sender: "ai",
-          text: `Thank you for your answer! Here's my feedback: [Evaluation logic here]`
-        }
-      ]);
-      return newId + 1;
-    });
+    // Add Logic Bot's answer after a short delay
+    const agent1 = agents[0];
+    if (agent1) {
+      setTimeout(() => {
+        setTypingMessageIds(prev => [...prev, messageIds.agent1]);
+        setMessages(prev => [
+          ...prev,
+          {
+            id: messageIds.agent1,
+            sender: "ai",
+            text: `My final answer is: Based on the pattern recognition, I believe the solution is [Agent 1's answer]. Here's my reasoning: [detailed explanation]`,
+            agentId: agent1.id,
+            onComplete: () => {
+              // Start Pattern Bot's answer only after Logic Bot finishes
+              const agent2 = agents[1];
+              if (agent2) {
+                setTypingMessageIds(prev => [...prev, messageIds.agent2]);
+                setMessages(prev => [
+                  ...prev,
+                  {
+                    id: messageIds.agent2,
+                    sender: "ai",
+                    text: `After analyzing the logical structure, I conclude that: [Agent 2's answer]. My reasoning is: [detailed explanation]`,
+                    agentId: agent2.id,
+                    onComplete: () => {
+                      // Start Teacher's evaluation only after Pattern Bot finishes
+                      setTypingMessageIds(prev => [...prev, messageIds.teacher]);
+                      setMessages(prev => [
+                        ...prev,
+                        {
+                          id: messageIds.teacher,
+                          sender: "ai",
+                          text: `Let me evaluate all three answers:\n\n1. Student's Answer: ${input.trim()}\nReasoning: ${scratchboardContent}\n\n2. ${agent1.name}'s Answer: [evaluation]\n\n3. ${agent2.name}'s Answer: [evaluation]\n\nOverall evaluation and correct solution: [detailed explanation]`,
+                          agentId: "bob"
+                        }
+                      ]);
+                    }
+                  }
+                ]);
+              }
+            }
+          }
+        ]);
+      }, 1000);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -254,7 +320,7 @@ export default function Home() {
           {/* Left AI Panel */}
           {agents[0] && <AISidePanel agent={agents[0]} isLeft />}
         {/* Blackboard Section */}
-          <div className="flex-1 flex items-center justify-center py-8 relative">
+          <div className="flex-1 flex items-center justify-center pb-8 relative">
             <div className="bg-secondary border-[#210651] border-[1em] w-full h-full rounded-xl mx-16 relative">
               
               {/* Timer */}
@@ -271,45 +337,52 @@ export default function Home() {
                 alt="Blackboard"
                 width={150}
                 height={150}
-                className="absolute z-10 -top-10 -left-20"
+                className="absolute z-10 -top-5 -left-20"
               />
 
               {/* Chat Area */}
               <div className="absolute inset-0 p-8 mt-16 mb-24 mx-8 flex flex-col">
-                <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+                <div
+                  ref={chatContainerRef}
+                  className="flex-1 overflow-y-auto space-y-4 mb-4 custom-scrollbar"
+                >
                   {messages.map((msg) => (
-                    <div key={msg.id} className={`flex ${msg.sender === "ai" ? "flex-row" : "flex-row-reverse"} items-start`}>
-                      <div className={`flex flex-col items-center ${msg.sender === "ai" ? "mr-3" : "ml-3"}`}>
-                        {msg.sender === "ai" ? (
-                          <>
-                            <div className="w-[40px] h-[40px] relative"> {/* Fixed size container */}
-                              <Image
-                                src={msg.agentId
-                                  ? agents.find(a => a.id === msg.agentId)?.avatar || "bob_avatar.svg"
-                                  : "bob_avatar.svg"}
-                                alt="AI Avatar"
-                                fill
-                                className="rounded-full object-cover"
-                              />
-                            </div>
-                            <span className="text-white text-xs mt-1">
-                              {msg.agentId
-                                ? agents.find(a => a.id === msg.agentId)?.name || "Bob"
-                                : "Bob"}
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <div className="w-[40px] h-[40px] rounded-full bg-blue-500 flex items-center justify-center">
-                              <span className="text-white text-sm">You</span>
-                            </div>
-                            <span className="text-white text-xs mt-1">You</span>
-                          </>
-                        )}
-                      </div>
+                    <div key={`msg-${msg.id}`} className={`flex ${msg.sender === "ai" ? "flex-row" : "flex-row-reverse"} items-start`}>
+                      {msg.sender === "ai" && (
+                        <div className={`flex flex-col items-center ${msg.sender === "ai" ? "mr-3" : "ml-3"}`}>
+                          <div className="w-[40px] h-[40px] relative">
+                            <Image
+                              src={msg.agentId
+                                ? agents.find(a => a.id === msg.agentId)?.avatar || "bob_avatar.svg"
+                                : "bob_avatar.svg"}
+                              alt="AI Avatar"
+                              fill
+                              className="rounded-full object-cover"
+                            />
+                          </div>
+                          <span className="text-white text-xs mt-1">
+                            {msg.agentId
+                              ? agents.find(a => a.id === msg.agentId)?.name || "Bob"
+                              : "Bob"}
+                          </span>
+                        </div>
+                      )}
                       <div className={`max-w-[70%] p-3 rounded-lg ${msg.sender === "ai" ? "bg-gray-200 text-gray-800" : "bg-blue-500 text-white"
                         }`}>
-                        {msg.text}
+                        {msg.sender === "ai" && typingMessageIds.includes(msg.id) ? (
+                          <TypewriterText
+                            text={msg.text}
+                            speed={30}
+                            onCharacterTyped={scrollToBottom}
+                            onComplete={() => {
+                              setTypingMessageIds(prev => prev.filter(id => id !== msg.id));
+                              scrollToBottom();
+                              msg.onComplete?.();
+                            }}
+                          />
+                        ) : (
+                          <div className="whitespace-pre-wrap">{msg.text}</div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -334,7 +407,7 @@ export default function Home() {
                 className="absolute z-10 bottom-full right-64"
               />
               {/* Question Input - Moved here and styled */}
-              {isQuestioningEnabled && (
+              {isQuestioningEnabled && !isFinalAnswerPhase && (
                 <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 w-full max-w-xl">
                   <div className="bg-white bg-opacity-20 rounded-lg p-2 flex gap-2 mx-4">
                     <input
@@ -361,47 +434,53 @@ export default function Home() {
           {agents[1] && <AISidePanel agent={agents[1]} />}
         </div>
         {/* Answer Submission Section */}
-        <div className="mt-4 flex gap-4 items-center justify-center">
-          <button
-            onClick={() => setScratchboardOpen(true)}
-            className="bg-primary hover:bg-opacity-90 text-white px-6 py-3 rounded-full flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-            </svg>
-            Scratchboard
-          </button>
-          <div className="flex items-center bg-white rounded-full p-2 max-w-xs w-full">
-            <input
-              type="text"
-              name="answer"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              className="flex-1 outline-none px-4 text-sm"
-              placeholder={scratchboardContent ? "Submit final answer..." : "Use scratchboard first..."}
-              disabled={!scratchboardContent || !isQuestioningEnabled}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!scratchboardContent || !isQuestioningEnabled}
-              className={`px-4 py-1 rounded-full text-sm ${scratchboardContent && isQuestioningEnabled
-                ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-            >
-              Submit
-            </button>
+        <div className="flex gap-4 items-center justify-center">
+          {/* Scratchboard Component */}
+          {/* Replace the Scratchboard button and component section with this */}
+          <div className="mt-4 flex gap-4 items-center justify-center w-full mx-auto">
+            {/* Scratchboard Textbox */}
+            <div className="w-full">
+              <label htmlFor="scratchboard" className="block text-white text-sm mb-2">
+                Show your reasoning:
+              </label>
+              <textarea
+                id="scratchboard"
+                value={scratchboardContent}
+                onChange={(e) => setScratchboardContent(e.target.value)}
+                className="w-full h-32 bg-white bg-opacity-10 text-white rounded-lg p-3 resize-none outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Write your reasoning here before submitting your final answer..."
+              />
+            </div>
+
+            {/* Final Answer Input */}
+            <div className="flex items-center bg-white rounded-full p-2 w-full">
+              <input
+                type="text"
+                name="answer"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                className="flex-1 outline-none px-4 text-sm"
+                placeholder={scratchboardContent ? "Submit final answer..." : "Show your reasoning first..."}
+                disabled={!scratchboardContent || !isQuestioningEnabled}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!scratchboardContent || !isQuestioningEnabled}
+                className={`px-4 py-1 rounded-full text-sm ${scratchboardContent && isQuestioningEnabled
+                  ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+              >
+                Submit
+              </button>
+            </div>
           </div>
+          
         </div>
       </div>
 
-      {/* Scratchboard Component */}
-      <Scratchboard
-        isOpen={isScratchboardOpen}
-        onClose={() => setScratchboardOpen(false)}
-        onContentChange={setScratchboardContent}
-      />
+      
     </div>
   );
 }
