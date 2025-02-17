@@ -77,7 +77,7 @@ export default function Home() {
   // Initial load – start new round on mount
   useEffect(() => {
     startNewRound();
-  }, [startNewRound]); // run once on mount
+  }, []); // run once on mount
 
   // Timer effect – runs continuously via one interval
   useEffect(() => {
